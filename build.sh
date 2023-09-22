@@ -30,3 +30,4 @@ umount /raspios/mnt/boot
 
 mkdir build
 zip build/${RASPIOS}.zip ${RASPIOS}.img
+# cp /usb_diff.patch /build/usb_diff.patch

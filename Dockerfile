@@ -1,25 +1,43 @@
 # set PLATFORM32 to something not null if you're building for older platforms, i.e. Pi 1, Pi Zero, Pi Zero W and Pi CM1
 # do not define PLATFORM32 or set it to null if you're building for newer platforms, i.e. Pi 3, Pi 3+, Pi 4, Pi 400, Pi Zero 2 W, Pi CM3, Pi CM3+, Pi CM4
-FROM ubuntu:20.04
+FROM ubuntu:latest
 
-ENV LINUX_KERNEL_VERSION=5.15
-ENV LINUX_KERNEL_BRANCH=rpi-${LINUX_KERNEL_VERSION}.y
-
-ENV TZ=Europe/Copenhagen
+# Timezone. You may change if you want
+ENV TZ=Europe/Amsterdam
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-RUN apt-get update
-RUN apt-get install -y git make gcc bison flex libssl-dev bc ncurses-dev kmod
-RUN apt-get install -y crossbuild-essential-arm64 crossbuild-essential-armhf
-RUN apt-get install -y wget zip unzip fdisk nano curl xz-utils
+# Installing dependencies
+RUN apt update
+RUN apt upgrade -y
+RUN apt install -y git make gcc bison flex libssl-dev bc ncurses-dev kmod
+RUN apt install -y crossbuild-essential-arm64 crossbuild-essential-armhf
+RUN apt install -y wget zip unzip fdisk nano curl xz-utils
 
+# Linux version. Only works if the usb driver is the same as in the patch. Will check.
+ENV LINUX_KERNEL_VERSION=6.6
+ENV LINUX_KERNEL_BRANCH=rpi-${LINUX_KERNEL_VERSION}.y
+
+# Download the kernels and RT patch
 WORKDIR /rpi-kernel
 RUN git clone https://github.com/raspberrypi/linux.git -b ${LINUX_KERNEL_BRANCH} --depth=1
 WORKDIR /rpi-kernel/linux
-RUN export PATCH=$(curl -s https://mirrors.edge.kernel.org/pub/linux/kernel/projects/rt/${LINUX_KERNEL_VERSION}/ | sed -n 's:.*<a href="\(.*\).patch.gz">.*:\1:p' | sort -V | tail -1) && \
-    echo "Downloading patch ${PATCH}" && \
-    curl https://mirrors.edge.kernel.org/pub/linux/kernel/projects/rt/${LINUX_KERNEL_VERSION}/${PATCH}.patch.gz --output ${PATCH}.patch.gz && \
-    gzip -cd /rpi-kernel/linux/${PATCH}.patch.gz | patch -p1 --verbose
+RUN export PATCH=$(curl -s https://mirrors.edge.kernel.org/pub/linux/kernel/projects/rt/${LINUX_KERNEL_VERSION}/ | sed -n 's:.*<a href="\(.*\).patch.gz">.*:\1:p' | sort -V | tail -1)
+RUN echo "Downloading patch ${PATCH}"
+RUN curl https://mirrors.edge.kernel.org/pub/linux/kernel/projects/rt/${LINUX_KERNEL_VERSION}/${PATCH}.patch.gz --output ${PATCH}.patch.gz
+RUN gzip -cd /rpi-kernel/linux/${PATCH}.patch.gz | patch -p1 --verbose
+
+# Apply USB patch
+ENV USB_DRIVER_SOURCE=usb_driver_patch
+ENV USB_DRIVER_PATCH=${USB_DRIVER_SOURCE}/patch
+ENV USB_DRIVER_CHECK=${USB_DRIVER_SOURCE}/check
+ENV USB_DRIVER_TARGET=/rpi-kernel/linux/drivers/usb/host/dwc_otg/
+
+COPY ${USB_DRIVER_SOURCE} /${USB_DRIVER_SOURCE}
+RUN echo "Applying USB patch. Open /usb_diff.patch to see the differences.."
+RUN bash /${USB_DRIVER_SOURCE}/patch.sh
+# RUN if [ ! -z "$(diff /${USB_DRIVER_CHECK}/ ${USB_DRIVER_TARGET} | grep -v '^Only in')" ]; then echo "Driver versions are not the same!"; echo "$(diff /${USB_DRIVER_CHECK}/ ${USB_DRIVER_TARGET} | grep -v '^Only in')"; exit 1; fi
+# RUN diff /${USB_DRIVER_CHECK}/ /${USB_DRIVER_PATCH}/ | cat > /usb_diff.patch
+# RUN cp /${USB_DRIVER_PATCH}/. ${USB_DRIVER_TARGET} -f -R
 
 ARG PLATFORM32
 
@@ -60,5 +78,5 @@ RUN export DATE=$(curl -s https://downloads.raspberrypi.org/${RASPIOS_IMAGE_NAME
     xz -d ${RASPIOS}.xz
 
 RUN mkdir /raspios/mnt && mkdir /raspios/mnt/disk && mkdir /raspios/mnt/boot
-ADD build.sh ./build.sh
-ADD config.txt ./
+COPY build.sh ./build.sh
+COPY config.txt ./
