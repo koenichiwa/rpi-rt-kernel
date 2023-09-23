@@ -13,7 +13,7 @@ Pi3 Pi4 Pi400 PiZero2 PiCM3 PiCM4: clean
 
 build:
 	mkdir -p build
-	docker build --build-arg PLATFORM32=$(platform32) --build-arg RASPIOS_IMAGE_NAME=$(raspios_image_name) -t rpi-rt-linux .
+	docker build --build-arg PLATFORM32=$(platform32) --build-arg RASPIOS_IMAGE_NAME=$(raspios_image_name) --build-arg NO_RT=${NO_RT} -t rpi-rt-linux .
 	docker rm tmp-rpi-rt-linux || true
 	docker run --privileged --name tmp-rpi-rt-linux rpi-rt-linux /raspios/build.sh
 	docker cp tmp-rpi-rt-linux:/raspios/build/ ./

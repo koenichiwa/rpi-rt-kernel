@@ -5,7 +5,7 @@ touch /check_diff.patch
 if [ -z "$(diff /${USB_DRIVER_CHECK}/v6 ${USB_DRIVER_TARGET} | grep -v '^Only in')" ]
 then 
     DRIVER_VERSION="v6"
-elif [[ -z "$(diff /${USB_DRIVER_CHECK}/v5 ${USB_DRIVER_TARGET} | grep -v '^Only in')" ]] 
+elif [ -z "$(diff /${USB_DRIVER_CHECK}/v5 ${USB_DRIVER_TARGET} | grep -v '^Only in')" ] 
 then
     DRIVER_VERSION="v5"
 else

@@ -17,27 +17,29 @@ RUN apt install -y wget zip unzip fdisk nano curl xz-utils
 ENV LINUX_KERNEL_VERSION=6.6
 ENV LINUX_KERNEL_BRANCH=rpi-${LINUX_KERNEL_VERSION}.y
 
-# Download the kernels and RT patch
+# Download the kernels
+
+
 WORKDIR /rpi-kernel
 RUN git clone https://github.com/raspberrypi/linux.git -b ${LINUX_KERNEL_BRANCH} --depth=1
 WORKDIR /rpi-kernel/linux
 RUN export PATCH=$(curl -s https://mirrors.edge.kernel.org/pub/linux/kernel/projects/rt/${LINUX_KERNEL_VERSION}/ | sed -n 's:.*<a href="\(.*\).patch.gz">.*:\1:p' | sort -V | tail -1)
-RUN echo "Downloading patch ${PATCH}"
-RUN curl https://mirrors.edge.kernel.org/pub/linux/kernel/projects/rt/${LINUX_KERNEL_VERSION}/${PATCH}.patch.gz --output ${PATCH}.patch.gz
-RUN gzip -cd /rpi-kernel/linux/${PATCH}.patch.gz | patch -p1 --verbose
 
-# Apply USB patch
+ARG NO_RT
+# Download and apply RT patch (unless NO_RT is defined)
+RUN [ -z "$NO_RT"] && echo "Downloading patch ${PATCH}" || true
+RUN [ -z "$NO_RT"] && curl https://mirrors.edge.kernel.org/pub/linux/kernel/projects/rt/${LINUX_KERNEL_VERSION}/${PATCH}.patch.gz --output ${PATCH}.patch.gz || true
+RUN [ -z "$NO_RT"] && gzip -cd /rpi-kernel/linux/${PATCH}.patch.gz | patch -p1 --verbose || true
+
+# Apply USB patch (unless NO_RT is defined)
 ENV USB_DRIVER_SOURCE=usb_driver_patch
 ENV USB_DRIVER_PATCH=${USB_DRIVER_SOURCE}/patch
 ENV USB_DRIVER_CHECK=${USB_DRIVER_SOURCE}/check
 ENV USB_DRIVER_TARGET=/rpi-kernel/linux/drivers/usb/host/dwc_otg/
 
 COPY ${USB_DRIVER_SOURCE} /${USB_DRIVER_SOURCE}
-RUN echo "Applying USB patch. Open /usb_diff.patch to see the differences.."
-RUN bash /${USB_DRIVER_SOURCE}/patch.sh
-# RUN if [ ! -z "$(diff /${USB_DRIVER_CHECK}/ ${USB_DRIVER_TARGET} | grep -v '^Only in')" ]; then echo "Driver versions are not the same!"; echo "$(diff /${USB_DRIVER_CHECK}/ ${USB_DRIVER_TARGET} | grep -v '^Only in')"; exit 1; fi
-# RUN diff /${USB_DRIVER_CHECK}/ /${USB_DRIVER_PATCH}/ | cat > /usb_diff.patch
-# RUN cp /${USB_DRIVER_PATCH}/. ${USB_DRIVER_TARGET} -f -R
+RUN [ -z "$NO_RT"] && echo "Applying USB patch. Open /usb_diff.patch to see the differences.." || true
+RUN [ -z "$NO_RT"] && bash /${USB_DRIVER_SOURCE}/patch.sh || true
 
 ARG PLATFORM32
 
@@ -56,14 +58,15 @@ ENV CROSS_COMPILE=${CROSS_COMPILE:-aarch64-linux-gnu-}
 # print the above env variables
 RUN echo ${KERNEL} ${ARCH} ${CROSS_COMPILE}
 
+# set the kernel config (leave default if NO_RT is defined)
 RUN [ "$ARCH" = "arm" ] && make bcmrpi_defconfig || make bcm2711_defconfig
-RUN ./scripts/config --disable CONFIG_VIRTUALIZATION
-RUN ./scripts/config --enable CONFIG_PREEMPT_RT
-RUN ./scripts/config --disable CONFIG_RCU_EXPERT
-RUN ./scripts/config --enable CONFIG_RCU_BOOST
-RUN [ "$ARCH" = "arm" ] && ./scripts/config --enable CONFIG_SMP || true
-RUN [ "$ARCH" = "arm" ] && ./scripts/config --disable CONFIG_BROKEN_ON_SMP || true
-RUN ./scripts/config --set-val CONFIG_RCU_BOOST_DELAY 500
+RUN [ -z "$NO_RT"] ./scripts/config --disable CONFIG_VIRTUALIZATION || true
+RUN [ -z "$NO_RT"] && ./scripts/config --enable CONFIG_PREEMPT_RT || true
+RUN [ -z "$NO_RT"] && ./scripts/config --disable CONFIG_RCU_EXPERT || true
+RUN [ -z "$NO_RT"] && ./scripts/config --enable CONFIG_RCU_BOOST || true
+RUN [ "$ARCH" = "arm" ] && [ -z "$NO_RT"] && ./scripts/config --enable CONFIG_SMP || true
+RUN [ "$ARCH" = "arm" ] &&[ -z "$NO_RT"] &&  ./scripts/config --disable CONFIG_BROKEN_ON_SMP || true
+RUN [ -z "$NO_RT"] && ./scripts/config --set-val CONFIG_RCU_BOOST_DELAY 500 || true
 
 RUN make -j4 Image modules dtbs
 
