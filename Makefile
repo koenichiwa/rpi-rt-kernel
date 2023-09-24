@@ -18,7 +18,6 @@ build:
 	docker run --privileged --name tmp-rpi-rt-linux rpi-rt-linux /raspios/build.sh
 	docker cp tmp-rpi-rt-linux:/raspios/build/ ./
 	docker rm tmp-rpi-rt-linux
-	ls . | grep zip | xargs unzip 
 
 custom:
 	docker run --rm --privileged -it rpi-rt-linux bash
